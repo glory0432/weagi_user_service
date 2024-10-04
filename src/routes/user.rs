@@ -8,5 +8,4 @@ pub fn add_routers(router: axum::Router<Arc<ServiceState>>) -> axum::Router<Arc<
     router
         .route("/api/auth/login", post(user::login))
         .route("/api/auth/refresh", post(user::refresh))
-    // .route("/api/v1/user/login", post(user::login))
 }

@@ -8,15 +8,13 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use chrono::Utc;
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, TokenData, Validation};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use uuid::Uuid;
 
 pub static DECODE_HEADER: Lazy<Validation> = Lazy::new(|| Validation::default());
 pub static ENCODE_HEADER: Lazy<Header> = Lazy::new(|| Header::default());

@@ -1,4 +1,3 @@
-use chrono::Utc;
 use hex;
 use hmac::{Hmac, Mac};
 use serde_json::Value;
