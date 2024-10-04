@@ -1,6 +1,6 @@
 use serde::Serialize;
 #[derive(Debug, Clone, Default, Serialize)]
-pub struct VerifyResponse {
+pub struct UserResponse {
     pub access_token: String,
     pub refresh_token: String,
 }

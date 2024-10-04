@@ -3,10 +3,10 @@ pub mod jwt;
 pub mod redis;
 pub mod server;
 pub mod tracing;
-use std::env;
 use dotenv::dotenv;
+use std::env;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct ServiceConfig {
     pub db: db::DatabaseConfig,
     pub redis: redis::RedisConfig,
@@ -21,7 +21,8 @@ impl ServiceConfig {
         self.redis.init_from_env()?;
         self.server.init_from_env()?;
         self.jwt.init_from_env()?;
-        self.bot_token = env::var("BOT_TOKEN").map_err(|_| "BOT_TOKEN not set in environment".to_string())?;
+        self.bot_token =
+            env::var("BOT_TOKEN").map_err(|_| "BOT_TOKEN not set in environment".to_string())?;
         Ok(())
     }
 }
