@@ -3,16 +3,16 @@ use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub async fn save(tx: &DatabaseTransaction, user_id: i64) -> Result<Uuid, String> {
     let new_user = user::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(user_id),
-        has_active_requests: Set(true),
-        is_on_trial: Set(true),
+        total_credits: Set(15),
+        credits_remaining: Set(15),
         subscription_status: Set(false),
-        create_at: Set(Utc::now()),
-        update_at: Set(Utc::now()),
+        created_at: Set(Utc::now()),
+        updated_at: Set(Utc::now()),
     };
 
     match new_user.insert(tx).await {
@@ -45,7 +45,7 @@ pub async fn find_by_user_id(
     }
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub async fn exist_by_user_id(tx: &DatabaseTransaction, user_id: i64) -> Result<bool, String> {
     match user::Entity::find()
         .filter(user::Column::UserId.eq(user_id))

@@ -32,8 +32,10 @@ impl DatabaseConfig {
     pub fn init_from_env(&mut self) -> Result<(), String> {
         self.username = env::var("DB_USERNAME")
             .map_err(|_| "DB_USERNAME not set in environment".to_string())?;
+
         self.password = env::var("DB_PASSWORD")
             .map_err(|_| "DB_PASSWORD not set in environment".to_string())?;
+
         self.host =
             env::var("DB_HOST").map_err(|_| "DB_HOST not set in environment".to_string())?;
 

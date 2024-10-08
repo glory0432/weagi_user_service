@@ -33,7 +33,6 @@ pub fn get_user_id(init_data: &str) -> i64 {
         error!("User data not found in the init_data.");
     }
 
-    // Return 0 in case of any errors
     0
 }
 

@@ -8,11 +8,11 @@ pub struct Model {
     pub id: Uuid,
     #[sea_orm(unique, indexed)]
     pub user_id: i64,
-    pub has_active_requests: bool,
-    pub is_on_trial: bool,
+    pub total_credits: i64,
+    pub credits_remaining: i64,
     pub subscription_status: bool,
-    pub create_at: DateTime<Utc>,
-    pub update_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

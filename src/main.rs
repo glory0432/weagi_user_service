@@ -34,13 +34,13 @@ async fn main() -> Result<(), String> {
             println!("💥 Error in database connection: {}", e);
             "Failed to build database client" // Provide a descriptive error message
         })?;
+    info!("📅 Connected to the database!");
 
     let service_state = Arc::new(ServiceState {
         config: Arc::new(service_config.clone()),
         db: Arc::new(db_client),
     });
 
-    // Handle the error for get_socket_addr appropriately
     let listener_addr = service_config
         .clone()
         .server
@@ -60,7 +60,6 @@ async fn main() -> Result<(), String> {
         error!("💥 Failed to get addr of the listener: {}", e);
         "Failed to get local listener address"
     })?;
-
     info!("🚀 The server is listening on: {}", addr); // Move logging before serving
 
     let router = create_router(service_state);
