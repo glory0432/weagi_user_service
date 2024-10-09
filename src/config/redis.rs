@@ -1,7 +1,6 @@
 use std::env;
 #[derive(Debug, Clone, Default)]
 pub struct RedisConfig {
-    pub password: String,
     pub port: u16,
     pub host: String,
     pub database: String,
@@ -9,17 +8,14 @@ pub struct RedisConfig {
 
 impl RedisConfig {
     pub fn get_url(&self) -> String {
-        Self::create_url(&self.password, &self.host, self.port, &self.database)
+        Self::create_url(&self.host, self.port, &self.database)
     }
 
-    pub fn create_url(password: &str, host: &str, port: u16, database_name: &str) -> String {
-        format!("redis://:{password}@{host}:{port}/{database_name}")
+    pub fn create_url(host: &str, port: u16, database_name: &str) -> String {
+        format!("redis://{host}:{port}/{database_name}")
     }
 
     pub fn init_from_env(&mut self) -> Result<(), String> {
-        self.password = env::var("REDIS_PASSWORD")
-            .map_err(|_| "REDIS_PASSWORD not set in environment".to_string())?;
-
         self.host =
             env::var("REDIS_HOST").map_err(|_| "REDIS_HOST not set in environment".to_string())?;
 

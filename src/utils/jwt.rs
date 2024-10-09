@@ -64,7 +64,6 @@ pub fn generate_token_pair(
     user_id: i64,
     session_id: Uuid,
 ) -> Result<(String, String), jsonwebtoken::errors::Error> {
-
     let access_token = UserClaims::new(
         Duration::from_secs(state.config.jwt.access_token_expired_date),
         user_id,

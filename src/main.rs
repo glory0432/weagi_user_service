@@ -8,7 +8,10 @@ mod routes;
 mod utils;
 
 use crate::{
-    client::db::{DatabaseClient, DatabaseClientExt},
+    client::{
+        db::{DatabaseClient, DatabaseClientExt},
+        redis::{RedisClient, RedisClientBuilder},
+    },
     config::{tracing::subscribe_tracing, ServiceConfig},
     routes::create_router,
 };
@@ -19,6 +22,7 @@ use tracing::{error, info};
 pub struct ServiceState {
     pub config: Arc<ServiceConfig>,
     pub db: Arc<DatabaseClient>,
+    pub redis: Arc<RedisClient>,
 }
 
 #[tokio::main]
@@ -31,14 +35,21 @@ async fn main() -> Result<(), String> {
     let db_client = DatabaseClient::build_from_config(&service_config)
         .await
         .map_err(|e| {
-            println!("💥 Error in database connection: {}", e);
+            error!("💥 Error in database connection: {}", e);
             "Failed to build database client" // Provide a descriptive error message
         })?;
     info!("📅 Connected to the database!");
 
+    let redis_client = RedisClient::build_from_config(&service_config).map_err(|e| {
+        error!("💥 Error in redis connection: {}", e);
+        "Failed to build redis client"
+    })?;
+    info!("📅 Connected to the Redis!");
+
     let service_state = Arc::new(ServiceState {
         config: Arc::new(service_config.clone()),
         db: Arc::new(db_client),
+        redis: Arc::new(redis_client),
     });
 
     let listener_addr = service_config
