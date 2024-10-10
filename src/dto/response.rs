@@ -8,7 +8,7 @@ pub struct UserResponse {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct GetSessionResponse {
     pub subscription_status: bool,
-    pub credits_remaining: i64,
+    pub credits_remaining: f64,
     pub preferences: serde_json::Value,
     pub session_metadata: serde_json::Value,
 }

@@ -9,7 +9,7 @@ pub async fn save(tx: &DatabaseTransaction, user_id: i64) -> Result<Uuid, String
     let new_session = session::ActiveModel {
         id: Set(Uuid::new_v4()),
         user_id: Set(user_id),
-        credits_remaining: Set(15),
+        credits_remaining: Set(15.0),
         subscription_status: Set(false),
         last_active_timestamp: Set(Utc::now().timestamp()),
         preferences: Set(json!({

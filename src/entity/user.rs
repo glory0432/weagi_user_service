@@ -1,15 +1,15 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, DeriveEntityModel)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
     #[sea_orm(unique, indexed)]
     pub user_id: i64,
-    pub total_credits: i64,
-    pub credits_remaining: i64,
+    pub total_credits: f64,
+    pub credits_remaining: f64,
     pub subscription_status: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

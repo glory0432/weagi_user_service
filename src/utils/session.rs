@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::sync::Arc;
 use std::time::Duration;
 
+use sea_orm::TransactionTrait;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -9,6 +11,7 @@ use tracing::info;
 use crate::{
     client::redis::{RedisClient, RedisClientExt},
     entity::session,
+    repositories, ServiceState,
 };
 
 pub trait RedisKey: Debug + Display {
@@ -73,4 +76,41 @@ pub async fn check_exist_key(redis: &RedisClient, key: &impl RedisKey) -> Result
         .exist(&key.to_string())
         .await
         .map_err(|e| format!("Redis client check existing error: {}", e))?)
+}
+
+pub async fn get_session_by_user_id(
+    state: Arc<ServiceState>,
+    user_id: i64,
+) -> Result<session::Model, String> {
+    let transaction = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| format!("Failed to start a database transaction: {}", e))?;
+    let session_key = SessionKey { user_id: user_id };
+    match get(&state.redis, &session_key)
+        .await
+        .map_err(|e| format!("Failed to get session from Redis: {}", e))?
+    {
+        Some(model) => Ok(model),
+        None => {
+            let session_data = repositories::session::find_by_user_id(&transaction, user_id)
+                .await
+                .map_err(|e| format!("Failed to find session by ID: {}", e))?;
+
+            if session_data.is_none() {
+                return Err("Session data not found".to_string());
+            }
+            transaction
+                .commit()
+                .await
+                .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            let session_data = session_data.unwrap();
+            set(&state.redis, (&session_key, &session_data))
+                .await
+                .map_err(|e| format!("Failed to set session in Redis: {}", e))?;
+
+            return Ok(session_data);
+        }
+    }
 }

@@ -1,19 +1,18 @@
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use sea_orm::TransactionTrait;
+use sea_orm::{ActiveModelTrait, Set, TransactionTrait};
 use tracing::{error, info};
 
 use crate::{
     dto::{request::SetSessionRequest, response::GetSessionResponse},
-    entity, repositories,
-    utils::{self, inter::VerifiedRequest, jwt::UserClaims},
+    entity,
+    utils::{self, jwt::UserClaims, session::SessionKey},
     ServiceState,
 };
 
 pub async fn set_session(
     State(state): State<Arc<ServiceState>>,
-    _: VerifiedRequest,
     user: UserClaims,
     Json(req): Json<SetSessionRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
@@ -25,32 +24,67 @@ pub async fn set_session(
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
-    let session_data = repositories::session::find_by_id(&transaction, user.sid)
+    let session_data = utils::session::get_session_by_user_id(state.clone(), user.uid)
         .await
-        .map_err(|e| {
-            let error_message = format!("Failed to find session by ID: {}", e);
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    let updated_model = entity::session::ActiveModel {
+        id: Set(session_data.id),
+        user_id: Set(session_data.user_id),
+        subscription_status: Set({
+            if req.subscription_status.is_some() {
+                req.subscription_status.unwrap()
+            } else {
+                session_data.subscription_status
+            }
+        }),
+        credits_remaining: Set({
+            if req.credits_remaining.is_some() {
+                req.credits_remaining.unwrap()
+            } else {
+                session_data.credits_remaining
+            }
+        }),
+        last_active_timestamp: Set(session_data.last_active_timestamp),
+        preferences: Set({
+            if req.preferences.is_some() {
+                req.preferences.unwrap()
+            } else {
+                session_data.preferences
+            }
+        }),
+        session_metadata: Set({
+            if req.session_metadata.is_some() {
+                req.session_metadata.unwrap()
+            } else {
+                session_data.session_metadata
+            }
+        }),
+        created_at: Set(session_data.created_at),
+        updated_at: Set(session_data.updated_at),
+    };
+
+    let updated_data: entity::session::Model =
+        updated_model.update(&transaction).await.map_err(|e| {
+            let error_message = format!("Error updating the conversation data: {}", e);
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
-
-    if session_data.is_none() {
-        let error_message = "Session data not found".to_string();
-        error!("{}", error_message);
-        return Err((StatusCode::NOT_FOUND, error_message));
-    }
-
-    let session_data = session_data.unwrap();
-
+    let session_key = SessionKey { user_id: user.uid };
+    utils::session::set(&state.redis, (&session_key, &updated_data))
+        .await
+        .map_err(|e| {
+            let error_message = format!("Failed to set session in Redis: {}", e);
+            error!("{}", error_message);
+            (StatusCode::INTERNAL_SERVER_ERROR, error_message)
+        })?;
     transaction.commit().await.map_err(|e| {
         let error_message = format!("Failed to commit transaction: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
-    info!(
-        "✅ Successfully sent the session data of the user {}.",
-        user.uid
-    );
+    info!("✅ Successfully sent the session data of the user {}.", 0);
 
     let response = Json(GetSessionResponse::default()).into_response();
     Ok(response)
@@ -62,59 +96,9 @@ pub async fn get_session(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("📥 Get session data request from the user {}", user.uid);
 
-    let transaction = state.db.begin().await.map_err(|e| {
-        let error_message = format!("Failed to start a database transaction: {}", e);
-        error!("{}", error_message);
-        (StatusCode::INTERNAL_SERVER_ERROR, error_message)
-    })?;
-
-    let session_key = utils::session::SessionKey { user_id: user.uid };
-
-    let session_model: entity::session::Model =
-        match utils::session::get(&state.redis, &session_key)
-            .await
-            .map_err(|e| {
-                let error_message = format!("Failed to get session from Redis: {}", e);
-                error!("{}", error_message);
-                (StatusCode::INTERNAL_SERVER_ERROR, error_message)
-            })? {
-            Some(model) => model,
-            None => {
-                let session_data = repositories::session::find_by_id(&transaction, user.sid)
-                    .await
-                    .map_err(|e| {
-                        let error_message = format!("Failed to find session by ID: {}", e);
-                        error!("{}", error_message);
-                        (StatusCode::INTERNAL_SERVER_ERROR, error_message)
-                    })?;
-
-                if session_data.is_none() {
-                    let error_message = "Session data not found".to_string();
-                    error!("{}", error_message);
-                    return Err((StatusCode::NOT_FOUND, error_message));
-                }
-                transaction.commit().await.map_err(|e| {
-                    let error_message = format!("Failed to commit transaction: {}", e);
-                    error!("{}", error_message);
-                    (StatusCode::INTERNAL_SERVER_ERROR, error_message)
-                })?;
-                let session_data = session_data.unwrap();
-                utils::session::set(&state.redis, (&session_key, &session_data))
-                    .await
-                    .map_err(|e| {
-                        let error_message = format!("Failed to set session in Redis: {}", e);
-                        error!("{}", error_message);
-                        (StatusCode::INTERNAL_SERVER_ERROR, error_message)
-                    })?;
-
-                session_data
-            }
-        };
-
-    info!(
-        "✅ Successfully sent the session data of the user {}.",
-        user.uid
-    );
+    let session_model = utils::session::get_session_by_user_id(state.clone(), user.uid)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     let response = Json(GetSessionResponse {
         subscription_status: session_model.subscription_status,
