@@ -16,17 +16,27 @@ pub async fn set_session(
     user: UserClaims,
     Json(req): Json<SetSessionRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    info!("📥 Get session data request from the user {}", user.uid);
+    info!("Received 'set_session' request for user ID: {}", user.uid);
 
     let transaction = state.db.begin().await.map_err(|e| {
-        let error_message = format!("Failed to start a database transaction: {}", e);
+        let error_message = format!(
+            "Failed to start a database transaction for user ID {}: {}",
+            user.uid, e
+        );
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
     let session_data = utils::session::get_session_by_user_id(state.clone(), user.uid)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| {
+            let error_message = format!(
+                "Failed to retrieve session data for user ID {}: {}",
+                user.uid, e
+            );
+            error!("{}", error_message);
+            (StatusCode::INTERNAL_SERVER_ERROR, error_message)
+        })?;
 
     let updated_model = entity::session::ActiveModel {
         id: Set(session_data.id),
@@ -66,25 +76,39 @@ pub async fn set_session(
 
     let updated_data: entity::session::Model =
         updated_model.update(&transaction).await.map_err(|e| {
-            let error_message = format!("Error updating the conversation data: {}", e);
+            let error_message = format!(
+                "Error updating session data for user ID {}: {}",
+                user.uid, e
+            );
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
+
     let session_key = SessionKey { user_id: user.uid };
     utils::session::set(&state.redis, (&session_key, &updated_data))
         .await
         .map_err(|e| {
-            let error_message = format!("Failed to set session in Redis: {}", e);
+            let error_message = format!(
+                "Failed to update session data in Redis for user ID {}: {}",
+                user.uid, e
+            );
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
+
     transaction.commit().await.map_err(|e| {
-        let error_message = format!("Failed to commit transaction: {}", e);
+        let error_message = format!(
+            "Failed to commit transaction for user ID {}: {}",
+            user.uid, e
+        );
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
-    info!("✅ Successfully sent the session data of the user {}.", 0);
+    info!(
+        "Successfully updated session data for user ID: {}",
+        user.uid
+    );
 
     let response = Json(GetSessionResponse::default()).into_response();
     Ok(response)
@@ -94,11 +118,23 @@ pub async fn get_session(
     State(state): State<Arc<ServiceState>>,
     user: UserClaims,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    info!("📥 Get session data request from the user {}", user.uid);
+    info!("Received 'get_session' request for user ID: {}", user.uid);
 
     let session_model = utils::session::get_session_by_user_id(state.clone(), user.uid)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| {
+            let error_message = format!(
+                "Failed to retrieve session data for user ID {}: {}",
+                user.uid, e
+            );
+            error!("{}", error_message);
+            (StatusCode::INTERNAL_SERVER_ERROR, error_message)
+        })?;
+
+    info!(
+        "Successfully retrieved session data for user ID: {}",
+        user.uid
+    );
 
     let response = Json(GetSessionResponse {
         subscription_status: session_model.subscription_status,

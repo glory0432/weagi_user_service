@@ -20,7 +20,7 @@ pub async fn login(
     TypedHeader(Authorization(creds)): TypedHeader<Authorization<Bearer>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     if !initdata::validate_initdata(creds.token(), &state.config.bot_token) {
-        error!("Invalid Authorization token");
+        error!("Authorization failed due to invalid token");
         return Err((
             StatusCode::FORBIDDEN,
             "Invalid Authorization token".to_string(),
@@ -28,13 +28,14 @@ pub async fn login(
     }
     let user_id = initdata::get_user_id(creds.token());
     if user_id == 0 {
+        error!("Invalid user ID derived from token, user ID: {}", user_id);
         return Err((StatusCode::BAD_REQUEST, "Invalid user ID".to_string()));
     }
 
-    info!("📥 Login request from the user {}", user_id);
+    info!("Received login request for user ID {}", user_id);
 
     let transaction = state.db.begin().await.map_err(|e| {
-        let error_message = format!("Failed to start a database transaction: {}", e);
+        let error_message = format!("Database transaction initiation failed: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
@@ -45,7 +46,7 @@ pub async fn login(
             let user_info = user::find_by_user_id(&transaction, user_id)
                 .await
                 .map_err(|e| {
-                    let error_message = format!("Failed to find the registered user: {}", e);
+                    let error_message = format!("Failed to retrieve user information: {}", e);
                     error!("{}", error_message);
                     (StatusCode::INTERNAL_SERVER_ERROR, error_message)
                 })?;
@@ -54,12 +55,12 @@ pub async fn login(
                     .await
                     .map_err(|e| {
                         let error_message =
-                            format!("Failed to find the corresponding session: {}", e);
+                            format!("Failed to retrieve session information: {}", e);
                         error!("{}", error_message);
                         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
                     })?,
                 None => {
-                    let error_message = "There is no such user with the user id".to_string();
+                    let error_message = "User not found for given user ID".to_string();
                     error!("{}", error_message);
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, error_message));
                 }
@@ -70,7 +71,7 @@ pub async fn login(
                     session_table_id = session_info.id;
                 })
                 .ok_or_else(|| {
-                    let error_message = "There is no such session with the user id".to_string();
+                    let error_message = "Session not found for given user ID".to_string();
                     error!("{}", error_message);
                     (StatusCode::INTERNAL_SERVER_ERROR, error_message)
                 })?;
@@ -78,42 +79,41 @@ pub async fn login(
 
         Ok(false) => {
             user::save(&transaction, user_id).await.map_err(|e| {
-                let error_message = format!("Failed to save user: {}", e);
+                let error_message = format!("User save operation failed: {}", e);
                 error!("{}", error_message);
                 (StatusCode::INTERNAL_SERVER_ERROR, error_message)
             })?;
 
             session_table_id = session::save(&transaction, user_id).await.map_err(|e| {
-                let error_message = format!("Failed to save session: {}", e);
+                let error_message = format!("Session save operation failed: {}", e);
                 error!("{}", error_message);
                 (StatusCode::INTERNAL_SERVER_ERROR, error_message)
             })?;
         }
 
         Err(e) => {
-            let error_message = format!("Failed to check if user exists: {}", e);
+            let error_message = format!("User existence check failed: {}", e);
             error!("{}", error_message);
             return Err((StatusCode::INTERNAL_SERVER_ERROR, error_message));
         }
     }
 
     transaction.commit().await.map_err(|e| {
-        let error_message = format!("Failed to commit transaction: {}", e);
+        let error_message = format!("Database transaction commit failed: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
-    info!(
-        "✅ Successfully verified with initData of the user {}.",
-        user_id
-    );
+    info!("User ID {} verified successfully with init data.", user_id);
 
     let (access_token, refresh_token) =
         jwt::generate_token_pair(state.clone(), user_id, session_table_id).map_err(|e| {
-            let error_message = format!("Failed to encode new access token: {}", e);
+            let error_message = format!("Token generation failed: {}", e);
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
+
+    info!("Token pair generated for user ID {}", user_id);
 
     let response = Json(UserResponse {
         access_token,
@@ -130,7 +130,7 @@ pub async fn refresh(
     Json(req): Json<RefreshRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     if !initdata::validate_initdata(creds.token(), &state.config.bot_token) {
-        error!("Invalid Authorization token");
+        error!("Authorization failed due to invalid token");
         return Err((
             StatusCode::FORBIDDEN,
             "Invalid Authorization token".to_string(),
@@ -138,13 +138,13 @@ pub async fn refresh(
     }
     let user_id = initdata::get_user_id(creds.token());
     if user_id == 0 {
-        error!("Invalid user ID from the token");
+        error!("Invalid user ID from the token, user ID: {}", user_id);
         return Err((StatusCode::BAD_REQUEST, "Invalid user ID".to_string()));
     }
-    info!("📥 Refresh request from the user {}", user_id);
+    info!("Received refresh request for user ID {}", user_id);
 
     let transaction = state.db.begin().await.map_err(|e| {
-        let error_message = format!("Failed to start a database transaction: {}", e);
+        let error_message = format!("Database transaction initiation failed: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
@@ -152,7 +152,7 @@ pub async fn refresh(
     let user_claims =
         UserClaims::decode(&req.refresh_token, &state.config.jwt.refresh_token_secret).map_err(
             |e| {
-                let error_message = format!("Failed to decode refresh token: {}", e);
+                let error_message = format!("Refresh token decoding failed: {}", e);
                 error!("{}", error_message);
                 (StatusCode::UNAUTHORIZED, error_message)
             },
@@ -160,32 +160,33 @@ pub async fn refresh(
     let user_info = user::find_by_user_id(&transaction, user_id)
         .await
         .map_err(|e| {
-            let error_message = format!("Failed to find the registered user: {}", e);
+            let error_message = format!("Failed to retrieve user information: {}", e);
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
     let session_info = session::find_by_user_id(&transaction, user_id)
         .await
         .map_err(|e| {
-            let error_message = format!("Failed to find the registered session: {}", e);
+            let error_message = format!("Failed to retrieve session information: {}", e);
             error!("{}", error_message);
             (StatusCode::INTERNAL_SERVER_ERROR, error_message)
         })?;
 
     if user_info.is_none() || session_info.is_none() {
-        let error_message = format!(
-            "There is no record of the registered user or session with the userId: {}",
-            user_id
-        );
+        let error_message = format!("User or session record not found for user ID: {}", user_id);
         error!("{}", error_message);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_message));
     }
 
-    if user_claims.claims.uid != user_info.unwrap().user_id
-        || user_claims.claims.sid != session_info.unwrap().id
+    if user_claims.claims.uid != user_info.clone().unwrap().user_id
+        || user_claims.claims.sid != session_info.clone().unwrap().id
     {
         error!(
-            "User ID or Session ID in claims does not match user ID or session ID from database"
+            "Claims user ID or session ID mismatch: token user ID {}, database user ID {}; token session ID {}, database session ID {}",  
+            user_claims.claims.uid,
+            user_info.unwrap().user_id,
+            user_claims.claims.sid,
+            session_info.unwrap().id
         );
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -194,10 +195,15 @@ pub async fn refresh(
     }
 
     transaction.commit().await.map_err(|e| {
-        let error_message = format!("Failed to commit transaction: {}", e);
+        let error_message = format!("Database transaction commit failed: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
+
+    info!(
+        "Refresh token successfully validated for user ID {}.",
+        user_id
+    );
 
     let (access_token, refresh_token) = jwt::generate_token_pair(
         state.clone(),
@@ -205,15 +211,12 @@ pub async fn refresh(
         user_claims.claims.sid,
     )
     .map_err(|e| {
-        let error_message = format!("Failed to encode new access token: {}", e);
+        let error_message = format!("Token generation for refresh failed: {}", e);
         error!("{}", error_message);
         (StatusCode::INTERNAL_SERVER_ERROR, error_message)
     })?;
 
-    info!(
-        "✅ Successfully token refresh with initData and refresh token of the user {}.",
-        user_id
-    );
+    info!("New token pair generated for user ID {}", user_id);
 
     let response = Json(UserResponse {
         access_token,

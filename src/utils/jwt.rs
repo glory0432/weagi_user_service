@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub static DECODE_HEADER: Lazy<Validation> = Lazy::new(|| Validation::default());
@@ -64,6 +65,11 @@ pub fn generate_token_pair(
     user_id: i64,
     session_id: Uuid,
 ) -> Result<(String, String), jsonwebtoken::errors::Error> {
+    info!(
+        "Generating token pair for user_id: {}, session_id: {}",
+        user_id, session_id
+    );
+
     let access_token = UserClaims::new(
         Duration::from_secs(state.config.jwt.access_token_expired_date),
         user_id,
@@ -78,6 +84,11 @@ pub fn generate_token_pair(
     )
     .encode(&state.config.jwt.refresh_token_secret)?;
 
+    info!(
+        "Successfully generated token pair for user_id: {}, session_id: {}",
+        user_id, session_id
+    );
+
     Ok((access_token, refresh_token))
 }
 
@@ -89,19 +100,30 @@ impl FromRequestParts<Arc<ServiceState>> for UserClaims {
         parts: &mut Parts,
         state: &Arc<ServiceState>,
     ) -> Result<Self, Self::Rejection> {
+        info!("Extracting and decoding UserClaims from request parts");
+
         let TypedHeader(Authorization(bearer)) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
             .await
             .map_err(|_| {
+                error!("Failed to extract 'Authorization' header. Ensure the token is provided.");
                 (
                     StatusCode::UNAUTHORIZED,
-                    "Invalid authorization header".to_string(),
+                    "Missing or invalid 'Authorization' header".to_string(),
                 )
             })?;
 
         let user_claims = UserClaims::decode(bearer.token(), &state.config.jwt.access_token_secret)
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token".to_string()))?
+            .map_err(|err| {
+                error!("Token decoding failed: {}. Possible reasons could be signature mismatch or token tampering.", err);  
+                (StatusCode::UNAUTHORIZED, "Invalid token".to_string())}  
+            )?
             .claims;
+
+        info!(
+            "Successfully extracted and decoded UserClaims from token for user_id: {}",
+            user_claims.uid
+        );
 
         Ok(user_claims)
     }
