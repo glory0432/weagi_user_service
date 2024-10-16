@@ -6,8 +6,9 @@ pub struct RefreshRequest {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct SetSessionRequest {
+    pub user_id: i64,
     pub subscription_status: Option<bool>,
-    pub credits_remaining: Option<f64>,
+    pub credits_remaining: Option<i64>,
     pub preferences: Option<serde_json::Value>,
     pub session_metadata: Option<serde_json::Value>,
 }

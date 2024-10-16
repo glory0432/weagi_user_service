@@ -175,7 +175,7 @@ pub async fn refresh(
     if user_info.is_none() || session_info.is_none() {
         let error_message = format!("User or session record not found for user ID: {}", user_id);
         error!("{}", error_message);
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_message));
+        return Err((StatusCode::NOT_FOUND, error_message));
     }
 
     if user_claims.claims.uid != user_info.clone().unwrap().user_id

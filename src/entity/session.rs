@@ -10,7 +10,7 @@ pub struct Model {
     #[sea_orm(unique, indexed)]
     pub user_id: i64,
     pub subscription_status: bool,
-    pub credits_remaining: f64,
+    pub credits_remaining: i64,
     pub last_active_timestamp: i64,
     pub preferences: serde_json::Value,
     pub session_metadata: serde_json::Value,
